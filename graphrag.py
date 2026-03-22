@@ -33,15 +33,12 @@ class GraphRAGService:
             return False
 
         try:
-            incident_text = f"""
-            Tipo: {incident_data.get("tipo", "N/A")}
-            Descripcion: {incident_data.get("descripcion", "N/A")}
-            Ubicacion: {incident_data.get("ubicacion", "N/A")}
-            Barrio: {incident_data.get("barrio", "N/A")}
-            Gravedad: {incident_data.get("gravedad", "N/A")}
-            Fecha: {incident_data.get("fecha", "N/A")}
-            Ciudad: Medellin
-            """.strip()
+            incident_text = f"""Tipo: {incident_data.get("tipo", "N/A")}
+Descripcion: {incident_data.get("descripcion", "N/A")}
+Ubicacion: {incident_data.get("ubicacion", "N/A")}
+Barrio: {incident_data.get("barrio", "N/A")}
+Gravedad: {incident_data.get("gravedad", "N/A")}
+Ciudad: Medellin""".strip()
 
             self.client.document.add(
                 collection_name="incidentes_medellin",
@@ -69,14 +66,12 @@ class GraphRAGService:
             return False
 
         try:
-            incident_text = f"""
-            INCIDENTE
-            Tipo: {incident_data.get("tipo", "N/A")}
-            Barrio: {incident_data.get("barrio", "N/A")}
-            Ubicacion: {incident_data.get("ubicacion", "N/A")}
-            Gravedad: {incident_data.get("gravedad", "N/A")}
-            Descripcion: {incident_data.get("descripcion", "N/A")}
-            """.strip()
+            incident_text = f"""INCIDENTE
+Tipo: {incident_data.get("tipo", "N/A")}
+Barrio: {incident_data.get("barrio", "N/A")}
+Ubicacion: {incident_data.get("ubicacion", "N/A")}
+Gravedad: {incident_data.get("gravedad", "N/A")}
+Descripcion: {incident_data.get("descripcion", "N/A")}""".strip()
 
             self.client.document.add(
                 collection_name="incidentes_medellin_graph",
@@ -89,7 +84,6 @@ class GraphRAGService:
                             "tipo": str(incident_data.get("tipo", "")),
                             "gravedad": str(incident_data.get("gravedad", "")),
                             "barrio": str(incident_data.get("barrio", "")),
-                            "ubicacion": str(incident_data.get("ubicacion", "")),
                             "ciudad": "Medellin",
                         },
                     }
@@ -127,8 +121,7 @@ class GraphRAGService:
                 limit=50,
             )
 
-            nodes = []
-            edges = []
+            nodes, edges = [], []
             barrio_clusters = {}
             tipo_clusters = {}
 
@@ -198,9 +191,7 @@ class GraphRAGService:
 
             barrio_counts = {}
             for r in results:
-                barrio = (
-                    r.metadata.get("barrio", "unknown") if r.metadata else "unknown"
-                )
+                barrio = (r.metadata or {}).get("barrio", "unknown")
                 if barrio not in barrio_counts:
                     barrio_counts[barrio] = {"count": 0, "incidents": []}
                 barrio_counts[barrio]["count"] += 1
@@ -212,51 +203,11 @@ class GraphRAGService:
                         }
                     )
 
-            hotspots = sorted(
+            return sorted(
                 [{"barrio": b, **data} for b, data in barrio_counts.items()],
                 key=lambda x: x["count"],
                 reverse=True,
             )[:top_n]
-
-            return hotspots
         except Exception as e:
             print(f"Error obteniendo hotspots: {e}")
             return []
-
-    def get_user_incident_history(self, user_id: str) -> List[Dict]:
-        if not self.is_available():
-            return []
-        return self.search_incidents(query=f"user_id:{user_id}", limit=50)
-
-    def analyze_incident_patterns(self, user_id: str) -> Dict:
-        if not self.is_available():
-            return {"patterns": [], "recommendations": []}
-
-        history = self.get_user_incident_history(user_id)
-
-        tipos: Dict[str, int] = {}
-        barrios: Dict[str, int] = {}
-
-        for item in history:
-            metadata = item.get("metadata", {})
-            tipo = str(metadata.get("tipo", "unknown"))
-            barrio = str(metadata.get("barrio", "unknown"))
-
-            tipos[tipo] = tipos.get(tipo, 0) + 1
-            barrios[barrio] = barrios.get(barrio, 0) + 1
-
-        recommendations: List[str] = []
-        if tipos:
-            most_common = max(tipos, key=lambda k: tipos[k])
-            recommendations.append(f"Tu tipo de incidente mas frecuente: {most_common}")
-
-        if barrios:
-            most_affected = max(barrios, key=lambda k: barrios[k])
-            recommendations.append(f"Tu zona mas afectada: {most_affected}")
-
-        return {
-            "incident_types": tipos,
-            "affected_areas": barrios,
-            "recommendations": recommendations,
-            "total_incidents": len(history),
-        }
