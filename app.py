@@ -304,18 +304,6 @@ def apply_custom_styles():
     st.markdown(FONT_CSS, unsafe_allow_html=True)
 
 
-def show_logo():
-    st.markdown(
-        """
-        <div class="main-header">
-            <h1 class="logo-title">🛡️ SAFE</h1>
-            <p class="logo-subtitle">Seguridad Inteligente y Siempre Activa</p>
-        </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-
 def show_bottom_nav(current_page: str, is_logged_in: bool):
     nav_items = [
         ("🏠", "Inicio", "home"),
@@ -361,94 +349,204 @@ def init_session_state():
 
 def render_register_form():
     apply_custom_styles()
-    show_logo()
 
-    st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+    col_left, col_right = st.columns([1, 1])
 
-    st.markdown("### 📝 Registro de Usuario")
-    st.markdown("*Crea tu cuenta para acceder a SAFE*")
-
-    with st.form("register_form", clear_on_submit=True):
-        nombre = st.text_input("Nombre completo", placeholder="Ej: Juan Pérez")
-        email = st.text_input(
-            "Email", placeholder="Ej: juan@ejemplo.com", type="default"
+    with col_left:
+        st.markdown(
+            """
+            <div style="position: fixed; top: 0; left: 0; width: 50%; height: 100vh; 
+                        background: linear-gradient(135deg, #0A2463 0%, #1a3a7a 50%, #61A0AF 100%);
+                        display: flex; flex-direction: column; justify-content: center; 
+                        align-items: center; padding: 2rem;">
+                <h1 style="color: white; font-size: 4rem; margin-bottom: 1rem;">🛡️</h1>
+                <h2 style="color: white; font-size: 2.5rem; margin-bottom: 0.5rem;">SAFE</h2>
+                <p style="color: rgba(255,255,255,0.8); font-size: 1.1rem; text-align: center;">
+                    Seguridad Inteligente<br>y Siempre Activa
+                </p>
+                <div style="margin-top: 3rem; color: rgba(255,255,255,0.6); text-align: center;">
+                    <p style="font-size: 0.9rem;">Protege lo que importa</p>
+                    <p style="font-size: 0.8rem;">Medellín, Colombia</p>
+                </div>
+            </div>
+        """,
+            unsafe_allow_html=True,
         )
-        password = st.text_input(
-            "Contraseña", placeholder="Mínimo 6 caracteres", type="password"
+
+    with col_right:
+        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div style="max-width: 380px; margin: 0 auto; padding: 2rem;">
+                <h3 style="color: #0A2463; font-size: 1.8rem; margin-bottom: 0.5rem;">
+                    Crear Cuenta
+                </h3>
+                <p style="color: #61A0AF; margin-bottom: 2rem;">
+                    Regístrate para reportar incidentes en Medellín
+                </p>
+            </div>
+        """,
+            unsafe_allow_html=True,
         )
-        telefono = st.text_input("Teléfono", placeholder="Ej: 300 123 4567", type="tel")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            submitted = st.form_submit_button("Registrarse")
-        with col2:
-            if st.form_submit_button(
-                "Ya tengo cuenta", kwargs={"form_id": "login_nav"}
-            ):
-                st.session_state.current_page = "login"
-                st.rerun()
+        with st.form("register_form", clear_on_submit=True):
+            nombre = st.text_input(
+                "Nombre completo",
+                placeholder="Ej: Juan Pérez",
+                label_visibility="collapsed",
+            )
 
-        if submitted:
-            if not all([nombre, email, password, telefono]):
-                st.markdown(
-                    '<div class="error-box">Por favor completa todos los campos</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                success, msg = db.create_user(nombre, email, password, telefono)
-                if success:
-                    st.markdown(
-                        f'<div class="success-box">✅ {msg}</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.session_state.current_page = "login"
-                    st.rerun()
+            email = st.text_input(
+                "Correo electrónico",
+                placeholder="tu@email.com",
+                type="default",
+                label_visibility="collapsed",
+            )
+
+            password = st.text_input(
+                "Contraseña",
+                placeholder="Mínimo 6 caracteres",
+                type="password",
+                label_visibility="collapsed",
+            )
+
+            telefono = st.text_input(
+                "Teléfono",
+                placeholder="Ej: 300 123 4567",
+                type="tel",
+                label_visibility="collapsed",
+            )
+
+            submitted = st.form_submit_button(
+                "Crear mi cuenta", use_container_width=True
+            )
+
+            if submitted:
+                if not all([nombre, email, password, telefono]):
+                    st.error("Por favor completa todos los campos")
+                elif len(password) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres")
                 else:
-                    st.markdown(
-                        f'<div class="error-box">❌ {msg}</div>', unsafe_allow_html=True
-                    )
+                    success, msg = db.create_user(nombre, email, password, telefono)
+                    if success:
+                        st.success("✅ ¡Cuenta creada exitosamente!")
+                        user = db.verify_user(email, password)
+                        if user:
+                            st.session_state.user = user
+                            st.session_state.current_page = "incidents"
+                            st.rerun()
+                    else:
+                        st.error(f"❌ {msg}")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 2rem; max-width: 380px; margin-left: auto; margin-right: auto;">
+                <span style="color: #666;">¿Ya tienes cuenta?</span>
+                <a href="#" onclick="window.parent.setInterval(()=>window.parent.document.querySelector('[data-testid=\"stForm\"] button[kind='secondaryFormSubmit']').click(), 100)" 
+                   style="color: #0A2463; font-weight: 600; margin-left: 0.5rem;">
+                    Iniciar sesión
+                </a>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        if st.button("← Volver al login", use_container_width=True):
+            st.session_state.current_page = "login"
+            st.rerun()
 
 
 def render_login_form():
     apply_custom_styles()
-    show_logo()
 
-    st.markdown('<div class="auth-card">', unsafe_allow_html=True)
+    col_left, col_right = st.columns([1, 1])
 
-    st.markdown("### 🔐 Iniciar Sesión")
-    st.markdown("*Accede a tu cuenta SAFE*")
-
-    with st.form("login_form", clear_on_submit=True):
-        email = st.text_input("Email", placeholder="tu@email.com", type="default")
-        password = st.text_input(
-            "Contraseña", placeholder="Tu contraseña", type="password"
+    with col_left:
+        st.markdown(
+            """
+            <div style="position: fixed; top: 0; left: 0; width: 50%; height: 100vh; 
+                        background: linear-gradient(135deg, #0A2463 0%, #1a3a7a 50%, #61A0AF 100%);
+                        display: flex; flex-direction: column; justify-content: center; 
+                        align-items: center; padding: 2rem;">
+                <h1 style="color: white; font-size: 4rem; margin-bottom: 1rem;">🛡️</h1>
+                <h2 style="color: white; font-size: 2.5rem; margin-bottom: 0.5rem;">SAFE</h2>
+                <p style="color: rgba(255,255,255,0.8); font-size: 1.1rem; text-align: center;">
+                    Seguridad Inteligente<br>y Siempre Activa
+                </p>
+                <div style="margin-top: 3rem; color: rgba(255,255,255,0.6); text-align: center;">
+                    <p style="font-size: 0.9rem;">Protegiendo a Medellín</p>
+                    <p style="font-size: 0.8rem;">Incidentes • Alertas • Análisis</p>
+                </div>
+            </div>
+        """,
+            unsafe_allow_html=True,
         )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            submitted = st.form_submit_button("Ingresar")
-        with col2:
-            if st.form_submit_button(
-                "Crear cuenta", kwargs={"form_id": "register_nav"}
-            ):
-                st.session_state.current_page = "register"
-                st.rerun()
+    with col_right:
+        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
 
-        if submitted:
-            user = db.verify_user(email, password)
-            if user:
-                st.session_state.user = user
-                st.session_state.current_page = "home"
-                st.rerun()
-            else:
-                st.markdown(
-                    '<div class="error-box">❌ Email o contraseña incorrectos</div>',
-                    unsafe_allow_html=True,
-                )
+        st.markdown(
+            """
+            <div style="max-width: 380px; margin: 0 auto; padding: 2rem;">
+                <h3 style="color: #0A2463; font-size: 1.8rem; margin-bottom: 0.5rem;">
+                    Bienvenido de nuevo
+                </h3>
+                <p style="color: #61A0AF; margin-bottom: 2rem;">
+                    Ingresa tus credenciales para continuar
+                </p>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        with st.form("login_form", clear_on_submit=True):
+            email = st.text_input(
+                "Correo electrónico",
+                placeholder="tu@email.com",
+                type="default",
+                label_visibility="collapsed",
+            )
+
+            password = st.text_input(
+                "Contraseña",
+                placeholder="Tu contraseña",
+                type="password",
+                label_visibility="collapsed",
+            )
+
+            submitted = st.form_submit_button(
+                "Iniciar Sesión", use_container_width=True
+            )
+
+            if submitted:
+                if not all([email, password]):
+                    st.error("Por favor completa todos los campos")
+                else:
+                    user = db.verify_user(email, password)
+                    if user:
+                        st.success("✅ ¡Bienvenido!")
+                        st.session_state.user = user
+                        st.session_state.current_page = "home"
+                        st.rerun()
+                    else:
+                        st.error("❌ Email o contraseña incorrectos")
+
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 2rem; max-width: 380px; margin-left: auto; margin-right: auto;">
+                <span style="color: #666;">¿No tienes cuenta?</span>
+                <a href="#" style="color: #0A2463; font-weight: 600; margin-left: 0.5rem;">
+                    Regístrate aquí
+                </a>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Crear una cuenta", use_container_width=True):
+            st.session_state.current_page = "register"
+            st.rerun()
 
 
 def render_home():
