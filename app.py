@@ -2,6 +2,9 @@ import streamlit as st
 import database as db
 import graphrag as grag
 import predictive_agents as agents
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
 
 st.set_page_config(
     page_title="SAFE - Seguridad Inteligente", page_icon="🛡️", layout="wide"
@@ -26,21 +29,12 @@ h1,h2,h3,h4 { font-family: 'Montserrat', sans-serif; font-weight: 700; color: #0
 .incident-item.alta { border-left-color: #FF8C00; }
 .incident-item.media { border-left-color: #FFD700; }
 .incident-item.baja { border-left-color: #4CAF50; }
-.agent-card { background: white; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; border: 2px solid #61A0AF; }
-.agent-card.active { border-color: #0A2463; background: rgba(10,36,99,0.03); }
-.graph-node { background: #61A0AF; border-radius: 50%; padding: 0.5rem 1rem; display: inline-block; color: white; font-weight: 600; margin: 0.25rem; }
-.graph-edge { border-left: 2px dashed #888; margin-left: 1rem; padding-left: 0.5rem; }
-.hotspot-badge { background: #FF6B6B; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; }
 .risk-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
 .risk-badge.critico { background: #FF6B6B; color: white; }
 .risk-badge.alto { background: #FF8C00; color: white; }
 .risk-badge.medio { background: #FFD700; color: #333; }
 .risk-badge.bajo { background: #4CAF50; color: white; }
 .recommendation-item { background: linear-gradient(90deg, rgba(10,36,99,0.05) 0%, transparent 100%); padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; border-left: 3px solid #0A2463; }
-.status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-.status-badge.pendiente { background: #FFF3CD; color: #856404; }
-.status-badge.procesando { background: #D1ECF1; color: #0C5460; }
-.status-badge.resuelto { background: #D4EDDA; color: #155724; }
 </style>
 """
 
@@ -58,6 +52,285 @@ def init_session():
         st.session_state.graphrag = grag.create_graphrag_service()
     if "orchestrator" not in st.session_state:
         st.session_state.orchestrator = agents.create_agent_orchestrator()
+
+
+def plot_incidents_by_barrio(df):
+    if df.empty:
+        return None
+
+    counts = df.groupby("barrio").size().reset_index(name="count")
+    counts = counts.sort_values("count", ascending=True).tail(10)
+
+    fig = px.bar(
+        counts,
+        y="barrio",
+        x="count",
+        orientation="h",
+        title="Incidentes por Barrio",
+        color="count",
+        color_continuous_scale="Blues",
+    )
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=18, color="#0A2463"),
+        showlegend=False,
+        height=400,
+    )
+    fig.update_traces(marker=dict(line=dict(color="#0A2463", width=1)))
+    return fig
+
+
+def plot_incidents_by_tipo(df):
+    if df.empty:
+        return None
+
+    counts = df.groupby("tipo").size().reset_index(name="count")
+
+    fig = px.pie(
+        counts,
+        values="count",
+        names="tipo",
+        title="Distribución por Tipo de Incidente",
+        hole=0.4,
+        color="tipo",
+        color_discrete_sequence=px.colors.qualitative.Set3,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=18, color="#0A2463"),
+        height=400,
+    )
+    fig.update_traces(textposition="inside", textinfo="percent+label")
+    return fig
+
+
+def plot_incidents_by_gravedad(df):
+    if df.empty:
+        return None
+
+    counts = df.groupby("gravedad").size().reset_index(name="count")
+    order = ["baja", "media", "alta", "crítica"]
+    counts["gravedad"] = pd.Categorical(
+        counts["gravedad"], categories=order, ordered=True
+    )
+    counts = counts.sort_values("gravedad")
+
+    colors = {
+        "baja": "#4CAF50",
+        "media": "#FFD700",
+        "alta": "#FF8C00",
+        "crítica": "#FF6B6B",
+    }
+    count_colors = [colors.get(g, "#61A0AF") for g in counts["gravedad"]]
+
+    fig = px.bar(
+        counts,
+        x="gravedad",
+        y="count",
+        title="Incidentes por Nivel de Gravedad",
+        color="gravedad",
+        color_discrete_map=colors,
+    )
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=18, color="#0A2463"),
+        showlegend=False,
+        height=400,
+    )
+    return fig
+
+
+def plot_timeline(incidents):
+    if not incidents:
+        return None
+
+    df = pd.DataFrame(incidents)
+    if "fecha" not in df.columns or df.empty:
+        return None
+
+    try:
+        df["fecha_dt"] = pd.to_datetime(df["fecha"], errors="coerce")
+        df = df.dropna(subset=["fecha_dt"])
+        df["date"] = df["fecha_dt"].dt.date
+        daily = df.groupby("date").size().reset_index(name="count")
+
+        fig = px.line(
+            daily,
+            x="date",
+            y="count",
+            title="Tendencia de Incidentes en el Tiempo",
+            markers=True,
+        )
+        fig.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font=dict(color="#0A2463"),
+            title_font=dict(size=18, color="#0A2463"),
+            height=300,
+        )
+        fig.update_traces(
+            line=dict(color="#0A2463", width=3), marker=dict(color="#61A0AF", size=10)
+        )
+        return fig
+    except:
+        return None
+
+
+def plot_risk_heatmap(incidents):
+    if not incidents:
+        return None
+
+    df = pd.DataFrame(incidents)
+    if "barrio" not in df.columns or "gravedad" not in df.columns:
+        return None
+
+    gravedad_map = {"baja": 1, "media": 2, "alta": 3, "crítica": 4}
+    df["risk_score"] = df["gravedad"].map(gravedad_map).fillna(1)
+
+    heatmap_data = (
+        df.groupby(["barrio", "tipo"])["risk_score"].mean().unstack(fill_value=0)
+    )
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=heatmap_data.values,
+            x=heatmap_data.columns,
+            y=heatmap_data.index,
+            colorscale="RdYlGn_r",
+            name="Riesgo",
+        )
+    )
+    fig.update_layout(
+        title="Mapa de Calor: Riesgo por Barrio y Tipo",
+        paper_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=16, color="#0A2463"),
+        height=400,
+    )
+    return fig
+
+
+def plot_correlation_graph(nodes, edges):
+    if not nodes:
+        return None
+
+    fig = go.Figure()
+
+    barrio_groups = {}
+    for i, node in enumerate(nodes):
+        barrio = node.get("barrio", "unknown")
+        if barrio not in barrio_groups:
+            barrio_groups[barrio] = []
+        barrio_groups[barrio].append(i)
+
+    colors = px.colors.qualitative.Set2
+    color_map = {
+        barrio: colors[i % len(colors)] for i, barrio in enumerate(barrio_groups.keys())
+    }
+
+    node_x = []
+    node_y = []
+    node_colors = []
+    node_text = []
+
+    for i, node in enumerate(nodes):
+        angle = 2 * 3.14159 * i / len(nodes)
+        radius = 1 + (i % 3) * 0.3
+        x = (
+            radius
+            * (0.5 + 0.5 * (i / len(nodes)))
+            * (1 if i % 2 == 0 else -1)
+            * abs(0.5 - (i % 10) / 20)
+        )
+        y = radius * ((i % 5) / 5 - 0.4)
+
+        x = (i % 10) / 5 - 1
+        y = (i // 10) / 3 - 0.5
+
+        node_x.append(x)
+        node_y.append(y)
+        node_colors.append(color_map.get(node.get("barrio", "unknown"), "#61A0AF"))
+        node_text.append(f"{node.get('tipo', '')}<br>{node.get('barrio', '')}")
+
+    for edge in edges[:50]:
+        try:
+            src_idx = int(edge.get("source", "node_0").split("_")[1])
+            tgt_idx = int(edge.get("target", "node_0").split("_")[1])
+            if src_idx < len(node_x) and tgt_idx < len(node_x):
+                fig.add_trace(
+                    go.Scatter(
+                        x=[node_x[src_idx], node_x[tgt_idx]],
+                        y=[node_y[src_idx], node_y[tgt_idx]],
+                        mode="lines",
+                        line=dict(color="rgba(97,160,175,0.3)", width=1),
+                        hoverinfo="none",
+                    )
+                )
+        except:
+            pass
+
+    fig.add_trace(
+        go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            marker=dict(size=20, color=node_colors, line=dict(color="white", width=2)),
+            text=[f"N{i + 1}" for i in range(len(nodes))],
+            textposition="middle center",
+            textfont=dict(color="white", size=10),
+            hovertext=node_text,
+            hoverinfo="text",
+        )
+    )
+
+    fig.update_layout(
+        title="Grafo de Correlación de Incidentes",
+        showlegend=True,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=18, color="#0A2463"),
+        height=500,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    )
+
+    return fig
+
+
+def plot_predictions(hotspots):
+    if not hotspots:
+        return None
+
+    df = pd.DataFrame(hotspots)
+
+    fig = px.scatter(
+        df,
+        x="barrio",
+        y="risk_score",
+        size="historical_count",
+        color="risk_level",
+        color_discrete_map={
+            "critico": "#FF6B6B",
+            "alto": "#FF8C00",
+            "medio": "#FFD700",
+            "bajo": "#4CAF50",
+        },
+        title="Predicciones de Hotspots",
+        size_max=40,
+    )
+    fig.update_layout(
+        paper_bgcolor="white",
+        font=dict(color="#0A2463"),
+        title_font=dict(size=18, color="#0A2463"),
+        height=400,
+    )
+    return fig
 
 
 def render_login_register():
@@ -110,8 +383,6 @@ def render_login_register():
                         st.rerun()
                     else:
                         st.error("❌ Email o contraseña incorrectos")
-                else:
-                    st.warning("⚠️ Completa todos los campos")
 
         with tab2:
             st.markdown(
@@ -202,117 +473,81 @@ def render_dashboard():
             unsafe_allow_html=True,
         )
 
-    if st.button("🔮 Ejecutar Análisis Predictivo", use_container_width=True):
-        st.session_state.page = "predictive"
-        st.rerun()
+    user_incidents = db.get_incidents(user["id"])
+    all_incidents = db.get_incidents()
 
-    st.markdown("---")
-
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["📊 Resumen", "🔥 Hotspots", "🔗 Grafo", "📋 Por Tipo"]
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["📊 Resumen", "📍 Barrios", "🏷️ Tipos", "⚠️ Gravedad", "🔗 Grafo"]
     )
 
     with tab1:
-        st.markdown("### Últimos Incidentes")
-        user_incidents = db.get_incidents(user["id"])[:5]
-        if user_incidents:
-            for inc in user_incidents:
-                g = inc.get("gravedad", "baja").lower()
-                st.markdown(
-                    f"""
-                    <div class="incident-item {g}">
-                        <strong style="color: #0A2463;">{inc.get("tipo")}</strong>
-                        <p style="margin: 0.5rem 0; color: #555;">{inc.get("descripcion", "N/A")}</p>
-                        <small style="color: #888;">📍 {inc.get("barrio", "N/A")} • {inc.get("gravedad", "N/A")}</small>
-                    </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info("No tienes incidentes reportados")
+        st.markdown("### Visualización General")
+
+        df_user = pd.DataFrame(user_incidents) if user_incidents else pd.DataFrame()
+        df_all = pd.DataFrame(all_incidents) if all_incidents else pd.DataFrame()
+
+        col_v1, col_v2 = st.columns(2)
+
+        with col_v1:
+            if not df_all.empty and "barrio" in df_all.columns:
+                fig = plot_incidents_by_barrio(df_all)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No hay datos suficientes para visualizar")
+
+        with col_v2:
+            if not df_all.empty and "tipo" in df_all.columns:
+                fig = plot_incidents_by_tipo(df_all)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
-        st.markdown("### 🔥 Zonas Calientes (Hotspots)")
-        if st.session_state.graphrag.is_available():
-            hotspots = st.session_state.graphrag.get_hotspots()
-            if hotspots:
-                for i, hs in enumerate(hotspots[:5]):
-                    st.markdown(
-                        f"""
-                        <div class="incident-item">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <strong style="color: #0A2463;">📍 {hs["barrio"]}</strong>
-                                    <p style="margin: 0.25rem 0 0 0; color: #888;">{hs["count"]} incidentes</p>
-                                </div>
-                                <span class="hotspot-badge">#{i + 1}</span>
-                            </div>
-                        </div>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.info("No hay datos de hotspots disponibles")
+        st.markdown("### Incidentes por Barrio")
+        if not df_all.empty and "barrio" in df_all.columns:
+            fig = plot_incidents_by_barrio(df_all)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("GraphRAG no disponible. Configure ZEP_API_KEY.")
+            st.info("No hay datos de barrios")
 
     with tab3:
-        st.markdown("### 🔗 Grafo de Correlación")
-        st.markdown("*Visualización de relaciones entre incidentes*")
+        st.markdown("### Distribución por Tipo")
+        if not df_all.empty and "tipo" in df_all.columns:
+            fig = plot_incidents_by_tipo(df_all)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No hay datos de tipos")
 
+    with tab4:
+        st.markdown("### Gravedad de Incidentes")
+        if not df_all.empty and "gravedad" in df_all.columns:
+            fig1 = plot_incidents_by_gravedad(df_all)
+            if fig1:
+                st.plotly_chart(fig1, use_container_width=True)
+
+            fig2 = plot_risk_heatmap(all_incidents)
+            if fig2:
+                st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No hay datos de gravedad")
+
+    with tab5:
+        st.markdown("### 🔗 Grafo de Correlación")
         graph_data = st.session_state.graphrag.build_incident_graph(user["id"])
 
         if graph_data.get("nodes"):
-            st.markdown(
-                f"**Nodos:** {len(graph_data['nodes'])} | **Conexiones:** {len(graph_data['edges'])}"
-            )
+            fig = plot_correlation_graph(graph_data["nodes"], graph_data["edges"])
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
 
-            clusters = graph_data.get("clusters", {})
-            barrio_clusters = clusters.get("por_barrio", {})
-
-            if barrio_clusters:
-                st.markdown("#### Clusters por Barrio")
-                for barrio, node_ids in list(barrio_clusters.items())[:5]:
-                    if len(node_ids) > 1:
-                        st.markdown(
-                            f"""
-                            <div style="background: rgba(97,160,175,0.1); padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
-                                <strong style="color: #0A2463;">📍 {barrio}</strong>
-                                <div style="margin-top: 0.5rem;">
-                                    {"".join([f'<span class="graph-node">{n}</span>' for n in node_ids[:5]])}
-                                </div>
-                                <small style="color: #888;">{len(node_ids)} nodos conectados</small>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
+            st.markdown("#### Clusters identificados:")
+            clusters = graph_data.get("clusters", {}).get("por_barrio", {})
+            for barrio, nodes in list(clusters.items())[:5]:
+                st.markdown(f"- 📍 **{barrio}**: {len(nodes)} incidentes conectados")
         else:
-            st.info(
-                "No hay suficientes datos para generar el grafo. Reporta más incidentes."
-            )
-
-    with tab4:
-        st.markdown("### Incidentes por Tipo")
-        por_tipo = stats.get("por_tipo", {})
-        if por_tipo:
-            for tipo, count in por_tipo.items():
-                st.markdown(
-                    f"""
-                    <div class="incident-item">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>{tipo}</span>
-                            <span style="background: #61A0AF; color: white; padding: 0.25rem 1rem; border-radius: 20px; font-weight: 600;">{count}</span>
-                        </div>
-                    </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-
-    alertas = stats.get("por_gravedad", {}).get("crítica", 0) + stats.get(
-        "por_gravedad", {}
-    ).get("alta", 0)
-    if alertas > 0:
-        st.error(f"🔔 {alertas} alertas activas requieren atención")
+            st.info("No hay suficientes datos para generar el grafo")
 
     col_nav = st.columns(5)
     pages = [
@@ -348,7 +583,9 @@ def render_incidents():
 
     st.markdown("## 🚨 Reporte de Incidentes - Medellín")
 
-    tab1, tab2 = st.tabs(["➕ Nuevo Reporte", "📋 Mis Reportes"])
+    tab1, tab2, tab3 = st.tabs(
+        ["➕ Nuevo Reporte", "📋 Mis Reportes", "📊 Estadísticas"]
+    )
 
     with tab1:
         st.markdown("### Datos del Reportante")
@@ -421,20 +658,40 @@ def render_incidents():
                 st.markdown(
                     f"""
                     <div class="incident-item {g}">
-                        <div style="display: flex; justify-content: space-between;">
-                            <div>
-                                <strong>{inc.get("tipo")}</strong>
-                                <p style="margin: 0.5rem 0; color: #555;">{inc.get("descripcion", "N/A")}</p>
-                                <small>📍 {inc.get("barrio", "N/A")} - {inc.get("ubicacion", "N/A")}</small>
-                            </div>
-                            <span class="status-badge {inc.get("estado", "pendiente")}">{inc.get("estado", "pendiente")}</span>
-                        </div>
+                        <strong>{inc.get("tipo")}</strong>
+                        <p style="margin: 0.5rem 0; color: #555;">{inc.get("descripcion", "N/A")}</p>
+                        <small>📍 {inc.get("barrio", "N/A")} - {inc.get("ubicacion", "N/A")}</small>
                     </div>
                 """,
                     unsafe_allow_html=True,
                 )
         else:
             st.info("No has reportado incidentes aún")
+
+    with tab3:
+        st.markdown("### 📊 Estadísticas de Mis Incidentes")
+        df = pd.DataFrame(incidents) if incidents else pd.DataFrame()
+
+        if not df.empty:
+            col_v1, col_v2 = st.columns(2)
+
+            with col_v1:
+                if "barrio" in df.columns:
+                    fig = plot_incidents_by_barrio(df)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
+            with col_v2:
+                if "tipo" in df.columns:
+                    fig = plot_incidents_by_tipo(df)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
+            fig_timeline = plot_timeline(incidents)
+            if fig_timeline:
+                st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.info("Reporta incidentes para ver estadísticas")
 
     col_nav = st.columns(5)
     pages = [
@@ -469,9 +726,6 @@ def render_predictive():
     )
 
     st.markdown("## 🔮 Análisis Predictivo con Agentes IA")
-    st.markdown(
-        "*Sistema multi-agente para predicción de incidentes y evaluación de riesgo*"
-    )
 
     incident_history = db.get_incidents(user["id"])
 
@@ -482,23 +736,29 @@ def render_predictive():
             analysis = st.session_state.orchestrator.run_full_analysis(
                 incident_history, {"user_id": user["id"], "nombre": user["nombre"]}
             )
-
             st.session_state.analysis_result = analysis
 
     if "analysis_result" in st.session_state and st.session_state.analysis_result:
         analysis = st.session_state.analysis_result
 
+        risk = analysis["risk_level"]
+        risk_color = {
+            "critico": "#FF6B6B",
+            "alto": "#FF8C00",
+            "medio": "#FFD700",
+            "bajo": "#4CAF50",
+        }
+
         st.markdown(
-            f"**Nivel de Riesgo:** <span class='risk-badge {analysis['risk_level']}'>{analysis['risk_level'].upper()}</span>",
+            f"### Nivel de Riesgo: <span class='risk-badge {risk}'>{risk.upper()}</span>",
             unsafe_allow_html=True,
         )
-        st.markdown(f"**Confianza del análisis:** {analysis['confidence']:.1f}%")
-        st.markdown(f"**Agentes activos:** {analysis['agent_count']}")
-
-        st.markdown("---")
+        st.markdown(
+            f"**Confianza:** {analysis['confidence']:.1f}% | **Agentes:** {analysis['agent_count']}"
+        )
 
         tab1, tab2, tab3, tab4 = st.tabs(
-            ["🌡️ Hotspot", "⏰ Temporal", "⚠️ Riesgo", "🔗 Correlación"]
+            ["🌡️ Hotspots", "⏰ Temporal", "⚠️ Riesgo", "🔗 Correlación"]
         )
 
         with tab1:
@@ -507,54 +767,61 @@ def render_predictive():
                 st.markdown(f"### {result['summary']}")
 
                 if result.get("hotspots"):
+                    fig = plot_predictions(result["hotspots"])
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
                     for hs in result["hotspots"]:
                         st.markdown(
-                            f"""
-                            <div class="incident-item">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <strong>📍 {hs["barrio"]}</strong>
-                                        <p style="margin: 0.25rem 0; color: #888;">Tipo probable: {hs["likely_type"]}</p>
-                                        <p style="margin: 0; color: #888;">Incidentes predichos: {hs["predicted_incidents"]}</p>
-                                    </div>
-                                    <span class="risk-badge {hs["risk_level"]}">{hs["risk_level"].upper()}</span>
-                                </div>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
+                            f"- 📍 **{hs['barrio']}**: {hs['predicted_incidents']} incidentes predichos ({hs['risk_level']})"
                         )
 
         with tab2:
             if "TemporalAgent" in analysis["results"]:
                 result = analysis["results"]["TemporalAgent"]
-                st.markdown(f"### {result['summary']}")
-
                 patterns = result.get("patterns", {})
+
                 if patterns.get("peak_hours"):
-                    st.markdown("#### Horarios Pico")
-                    for ph in patterns["peak_hours"][:3]:
-                        st.markdown(f"- **{ph['hour']}:00** - {ph['count']} incidentes")
+                    df_hours = pd.DataFrame(patterns["peak_hours"])
+                    fig = px.bar(
+                        df_hours, x="hour", y="count", title="Incidentes por Hora"
+                    )
+                    fig.update_layout(paper_bgcolor="white", plot_bgcolor="white")
+                    fig.update_traces(marker_color="#0A2463")
+                    st.plotly_chart(fig, use_container_width=True)
 
                 if patterns.get("peak_days"):
                     st.markdown("#### Días Pico")
                     for pd in patterns["peak_days"]:
-                        st.markdown(f"- **{pd['day']}** - {pd['count']} incidentes")
+                        st.markdown(f"- 📅 **{pd['day']}**: {pd['count']} incidentes")
 
         with tab3:
             if "RiskAgent" in analysis["results"]:
                 result = analysis["results"]["RiskAgent"]
-                st.markdown(f"### {result['summary']}")
-
                 ra = result.get("risk_assessment", {})
-                st.markdown(f"**Score de riesgo:** {ra.get('score', 0)}%")
 
-                if ra.get("factors"):
-                    st.markdown("#### Distribución por Gravedad")
-                    for g, count in ra["factors"].items():
-                        if count > 0:
-                            st.markdown(f"- **{g}:** {count}")
+                df_factors = pd.DataFrame([ra.get("factors", {})]).T.reset_index()
+                df_factors.columns = ["gravedad", "count"]
 
-                st.markdown("#### Recomendaciones de Seguridad")
+                colors = {
+                    "baja": "#4CAF50",
+                    "media": "#FFD700",
+                    "alta": "#FF8C00",
+                    "crítica": "#FF6B6B",
+                }
+
+                fig = px.pie(
+                    df_factors,
+                    values="count",
+                    names="gravedad",
+                    title="Distribución por Gravedad",
+                    color="gravedad",
+                    color_discrete_map=colors,
+                )
+                fig.update_layout(paper_bgcolor="white")
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown("#### Recomendaciones")
                 for rec in result.get("recommendations", []):
                     st.markdown(
                         f"<div class='recommendation-item'>⚡ {rec}</div>",
@@ -568,35 +835,8 @@ def render_predictive():
 
                 for corr in result.get("correlations", [])[:5]:
                     st.markdown(
-                        f"""
-                        <div class="incident-item">
-                            <strong>📍 {corr["barrio"]}</strong>
-                            <p style="margin: 0.5rem 0; color: #555;">Tipos correlacionados: {", ".join(corr["incident_types"])}</p>
-                            <small style="color: #61A0AF;">Fuerza de correlación: {corr["correlation_strength"]}%</small>
-                        </div>
-                    """,
-                        unsafe_allow_html=True,
+                        f"- 🔗 **{corr['barrio']}**: {corr['type_count']} tipos ({corr['correlation_strength']}%)"
                     )
-
-        st.markdown("---")
-        st.markdown("### 📋 Recomendaciones Consolidadas")
-
-        for rec in analysis.get("consolidated_recommendations", [])[:5]:
-            priority_emoji = (
-                "🔴" if rec["priority"] >= 3 else "🟡" if rec["priority"] >= 2 else "🟢"
-            )
-            st.markdown(
-                f"{priority_emoji} **{rec['text']}** <small>({rec['source']})</small>"
-            )
-    else:
-        st.info("👆 Ejecuta el análisis predictivo para ver los resultados")
-        st.markdown("""
-            **Agentes disponibles:**
-            - 🌡️ **HotspotAgent**: Predice zonas calientes
-            - ⏰ **TemporalAgent**: Analiza patrones temporales
-            - ⚠️ **RiskAgent**: Evalúa nivel de riesgo
-            - 🔗 **CorrelationAgent**: Encuentra correlaciones
-        """)
 
     col_nav = st.columns(5)
     pages = [
@@ -633,8 +873,7 @@ def render_search():
     st.markdown("## 🔍 Búsqueda Semántica GraphRAG")
 
     query = st.text_input(
-        "Buscar incidentes",
-        placeholder="Ej: hurtos en El Poblado, accidentes en Laureles...",
+        "Buscar incidentes", placeholder="Ej: hurtos en El Poblado..."
     )
 
     if st.button("🔍 Buscar", use_container_width=True, type="primary"):
@@ -643,33 +882,16 @@ def render_search():
                 with st.spinner("Buscando..."):
                     results = st.session_state.graphrag.search_incidents(query)
                     if results:
-                        st.success(f"✅ {len(results)} resultados encontrados")
+                        st.success(f"✅ {len(results)} resultados")
                         for r in results:
                             metadata = r.get("metadata", {})
                             st.markdown(
-                                f"""
-                                <div class="incident-item">
-                                    <p>{r.get("content", "")}</p>
-                                    <small>📍 {metadata.get("barrio", "N/A")} | 🏷️ {metadata.get("tipo", "N/A")} | 📊 {r.get("score", 0):.2f}</small>
-                                </div>
-                            """,
-                                unsafe_allow_html=True,
+                                f"- 📍 {metadata.get('barrio', 'N/A')} | {metadata.get('tipo', 'N/A')}"
                             )
                     else:
-                        st.info("No se encontraron resultados")
+                        st.info("Sin resultados")
             else:
-                st.warning("GraphRAG no disponible. Configure ZEP_API_KEY.")
-
-    st.markdown("### 💡 Sugerencias")
-    suggestions = [
-        "hurtos en El Poblado",
-        "accidentes en Laureles",
-        "vandalismo en centro",
-    ]
-    for sug in suggestions:
-        if st.button(sug):
-            st.session_state.query = sug
-            st.rerun()
+                st.warning("GraphRAG no disponible")
 
     col_nav = st.columns(5)
     pages = [
@@ -709,7 +931,7 @@ def render_profile():
         st.metric("Incidentes", len(user_incidents))
     with col2:
         st.metric(
-            "Critical", sum(1 for i in user_incidents if i.get("gravedad") == "crítica")
+            "Críticos", sum(1 for i in user_incidents if i.get("gravedad") == "crítica")
         )
     with col3:
         st.metric("Total ciudad", db.get_incident_stats().get("total", 0))
