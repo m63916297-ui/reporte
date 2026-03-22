@@ -1,7 +1,6 @@
 import os
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from zep_cloud.client import Zep
-from zep_cloud.message import Message
 
 ZEP_API_KEY = os.environ.get("ZEP_API_KEY", "")
 
