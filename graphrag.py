@@ -1,15 +1,14 @@
 import os
 from typing import List, Dict, Optional
 from zep_cloud.client import Zep
-from zep_cloud.message import Message
 
 ZEP_API_KEY = os.environ.get("ZEP_API_KEY", "")
 
 
 class GraphRAGService:
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or ZEP_API_KEY
-        self.client = None
+        self.client: Optional[Zep] = None
         if self.api_key:
             self.client = Zep(api_key=self.api_key)
 
@@ -21,11 +20,11 @@ class GraphRAGService:
             return False
 
         try:
-            collection_name = f"incidentes_medellin"
+            collection_name = "incidentes_medellin"
             incident_text = f"""
             Tipo: {incident_data.get("tipo", "N/A")}
-            Descripción: {incident_data.get("descripcion", "N/A")}
-            Ubicación: {incident_data.get("ubicacion", "N/A")}
+            Descripcion: {incident_data.get("descripcion", "N/A")}
+            Ubicacion: {incident_data.get("ubicacion", "N/A")}
             Barrio: {incident_data.get("barrio", "N/A")}
             Gravedad: {incident_data.get("gravedad", "N/A")}
             Fecha: {incident_data.get("fecha", "N/A")}
@@ -35,14 +34,14 @@ class GraphRAGService:
                 collection_name=collection_name,
                 documents=[
                     {
-                        "document_id": incident_data.get("id", ""),
+                        "document_id": str(incident_data.get("id", "")),
                         "content": incident_text,
                         "metadata": {
                             "user_id": user_id,
-                            "tipo": incident_data.get("tipo", ""),
-                            "gravedad": incident_data.get("gravedad", ""),
-                            "barrio": incident_data.get("barrio", ""),
-                            "ciudad": "Medellín",
+                            "tipo": str(incident_data.get("tipo", "")),
+                            "gravedad": str(incident_data.get("gravedad", "")),
+                            "barrio": str(incident_data.get("barrio", "")),
+                            "ciudad": "Medellin",
                         },
                     }
                 ],
@@ -61,7 +60,7 @@ class GraphRAGService:
                 query=query, collection_name="incidentes_medellin", limit=limit
             )
             return [
-                {"content": r.content, "score": r.score, "metadata": r.metadata}
+                {"content": r.content, "score": r.score, "metadata": r.metadata or {}}
                 for r in results
             ]
         except Exception as e:
@@ -80,29 +79,27 @@ class GraphRAGService:
 
         history = self.get_user_incident_history(user_id)
 
-        tipos = {}
-        barrios = {}
-        gravedad_map = {"baja": 1, "media": 2, "alta": 3, "crítica": 4}
+        tipos: Dict[str, int] = {}
+        barrios: Dict[str, int] = {}
 
         for item in history:
             metadata = item.get("metadata", {})
-            tipo = metadata.get("tipo", "unknown")
-            barrio = metadata.get("barrio", "unknown")
-            gravedad = metadata.get("gravedad", "media")
+            tipo = str(metadata.get("tipo", "unknown"))
+            barrio = str(metadata.get("barrio", "unknown"))
 
             tipos[tipo] = tipos.get(tipo, 0) + 1
             barrios[barrio] = barrios.get(barrio, 0) + 1
 
-        recommendations = []
+        recommendations: List[str] = []
         if tipos:
-            most_common_type = max(tipos, key=tipos.get)
+            most_common_type = max(tipos, key=lambda k: tipos[k])
             recommendations.append(
-                f"Basado en tu historial, el tipo de incidente más frecuente es: {most_common_type}"
+                f"Basado en tu historial, el tipo de incidente mas frecuente es: {most_common_type}"
             )
 
         if barrios:
-            most_affected = max(barrios, key=barrios.get)
-            recommendations.append(f"Tu zona más afectada es: {most_affected}")
+            most_affected = max(barrios, key=lambda k: barrios[k])
+            recommendations.append(f"Tu zona mas afectada es: {most_affected}")
 
         return {
             "incident_types": tipos,
@@ -112,5 +109,5 @@ class GraphRAGService:
         }
 
 
-def create_graphrag_service(api_key: str = None) -> GraphRAGService:
+def create_graphrag_service(api_key: Optional[str] = None) -> GraphRAGService:
     return GraphRAGService(api_key)
